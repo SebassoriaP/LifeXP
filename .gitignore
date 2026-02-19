@@ -1,0 +1,78 @@
+# ==============================
+# Flutter/Dart/Pub related
+# ==============================
+
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+
+
+# Flutter generated
+.flutter-plugins
+.flutter-plugins-dependencies
+.flutter-versions
+.flutter-plugins
+
+# ==============================
+# Android
+# ==============================
+
+android/.gradle/
+android/app/build/
+android/build/
+
+android/local.properties
+android/key.properties
+
+# Keystore files (IMPORTANT)
+*.jks
+*.keystore
+
+# Gradle
+.gradle/
+gradle-wrapper.jar
+
+# ==============================
+# iOS
+# ==============================
+
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/App.framework
+
+# Xcode
+*.xcworkspace
+*.xcuserstate
+*.xcuserdata
+DerivedData/
+
+# ==============================
+# VS Code / Android Studio
+# ==============================
+
+.idea/
+.vscode/
+*.iml
+
+# ==============================
+# Mac / Windows junk
+# ==============================
+
+.DS_Store
+Thumbs.db
+
+# ==============================
+# Logs
+# ==============================
+
+*.log
+
+# ==============================
+# Environment files
+# ==============================
+
+.env
+.env.*
