@@ -27,16 +27,27 @@ class StickyBootReceiver : BroadcastReceiver() {
         val prefs = context.getSharedPreferences("lifexp_prefs", Context.MODE_PRIVATE)
         val enabled = prefs.getBoolean(KEY_ENABLED, true)
         val lastDate = prefs.getString(KEY_LAST_DATE, null)
+        val lastDecision = prefs.getString(KEY_LAST_DECISION, null)
         val nowMs = System.currentTimeMillis()
         val lastSyncAt = prefs.getLong(KEY_LAST_SYNC_AT, 0L)
         val today = DateUtil.todayLocalIsoDate()
         val cooldownMs = 10 * 60 * 1000L
         val inCooldown = (nowMs - lastSyncAt) < cooldownMs
-        val shouldStart = enabled && !inCooldown && (lastDate == null || lastDate != today)
+        val isNewDay = lastDate == null || lastDate != today
+        val wasStickyActive = lastDecision == "start"
+        // New day → start (unless in cooldown).
+        // Same day but notification was active before reboot/update → always restart.
+        // Same day and notification was stopped (completed or too early) → don't start.
+        val shouldStart = enabled && when {
+            isNewDay -> !inCooldown
+            wasStickyActive -> true
+            else -> false
+        }
 
         Log.d(
             "StickyBootReceiver",
-            "enabled=$enabled lastDate=$lastDate today=$today inCooldown=$inCooldown shouldStart=$shouldStart",
+            "enabled=$enabled lastDate=$lastDate today=$today lastDecision=$lastDecision " +
+            "inCooldown=$inCooldown isNewDay=$isNewDay wasStickyActive=$wasStickyActive shouldStart=$shouldStart",
         )
 
         if (!shouldStart) return

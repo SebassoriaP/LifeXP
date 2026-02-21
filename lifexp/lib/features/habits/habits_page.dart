@@ -21,7 +21,7 @@ class HabitsPage extends ConsumerWidget {
           final input = await _showCreateDialog(context);
           if (input == null || input.title.trim().isEmpty) return;
 
-          await ref
+          final habitId = await ref
               .read(habitsRepoProvider)
               .createHabit(
                 title: input.title.trim(),
@@ -32,7 +32,15 @@ class HabitsPage extends ConsumerWidget {
                 windowStart: '13:00:00',
                 windowEnd: '22:00:00',
               );
+          // Run the general RPC sync first, then directly ensure today's
+          // instance for this new habit in case the RPC misses it.
           await ref.read(instancesRepoProvider).ensureTodayInstances();
+          await ref
+              .read(instancesRepoProvider)
+              .ensureInstanceForToday(
+                habitId: habitId,
+                daysOfWeek: input.daysOfWeek,
+              );
           ref.invalidate(habitsListProvider);
           ref.invalidate(todayInstancesProvider);
         },
@@ -46,34 +54,76 @@ class HabitsPage extends ConsumerWidget {
             final active = h['active'] == true;
             final preferredTime = h['preferred_time']?.toString() ?? '--:--:--';
             final expected = (h['expected_minutes'] as num?)?.toInt() ?? 30;
-            return ListTile(
-              onTap: () => _openEditHabit(context, ref, h),
-              title: Text(h['title'] ?? ''),
-              subtitle: Text(
-                '${active ? 'Active' : 'Inactive'} • ${expected}m • ${_hhmm(preferredTime)}',
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: 'Editar',
-                    icon: const Icon(Icons.edit),
-                    onPressed: () => _openEditHabit(context, ref, h),
-                  ),
-                  Switch(
-                    value: active,
-                    onChanged: (v) async {
-                      await ref
-                          .read(habitsRepoProvider)
-                          .setHabitActive(h['id'], v);
-                      await ref
-                          .read(instancesRepoProvider)
-                          .ensureTodayInstances();
-                      ref.invalidate(habitsListProvider);
-                      ref.invalidate(todayInstancesProvider);
-                    },
-                  ),
-                ],
+            return Card(
+              key: ValueKey(h['id']?.toString()),
+              clipBehavior: Clip.hardEdge,
+              child: ListTile(
+                onTap: () => _openEditHabit(context, ref, h),
+                title: Text(h['title'] ?? ''),
+                subtitle: Text(
+                  '${active ? 'Active' : 'Inactive'} • ${expected}m • ${_hhmm(preferredTime)}',
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Editar',
+                      icon: const Icon(Icons.edit),
+                      onPressed: () => _openEditHabit(context, ref, h),
+                    ),
+                    IconButton(
+                      tooltip: 'Eliminar',
+                      icon: Icon(
+                        Icons.delete_outline,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      onPressed: () async {
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            title: const Text('Delete habit?'),
+                            content: const Text(
+                              'This will remove it from your list (history stays).',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('Delete'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (ok != true) return;
+
+                        final habitId = h['id']?.toString();
+                        if (habitId == null) return;
+                        await ref.read(habitsRepoProvider).deleteHabit(habitId);
+                        await ref
+                            .read(instancesRepoProvider)
+                            .ensureTodayInstances();
+                        ref.invalidate(habitsListProvider);
+                        ref.invalidate(todayInstancesProvider);
+                      },
+                    ),
+                    Switch(
+                      value: active,
+                      onChanged: (v) async {
+                        await ref
+                            .read(habitsRepoProvider)
+                            .setHabitActive(h['id'], v);
+                        await ref
+                            .read(instancesRepoProvider)
+                            .ensureTodayInstances();
+                        ref.invalidate(habitsListProvider);
+                        ref.invalidate(todayInstancesProvider);
+                      },
+                    ),
+                  ],
+                ),
               ),
             );
           },

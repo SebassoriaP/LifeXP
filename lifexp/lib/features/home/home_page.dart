@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../providers.dart';
 import '../focus/focus_page.dart';
+import '../../core/focus_mode/focus_mode_service.dart';
+import '../../theme/lifexp_colors.dart';
 
 // Dashboard providers (fase 5)
 import '../../dashboard/providers.dart';
@@ -20,6 +22,19 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
+  bool _syncing = false;
+
+  void _handleHorizontalSwipe(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity.abs() < 250) return;
+
+    if (velocity > 0) {
+      context.go('/habits');
+      return;
+    }
+    context.go('/dashboard');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +106,9 @@ class _HomePageState extends ConsumerState<HomePage> {
     ref.invalidate(todayInstancesProvider);
     ref.invalidate(playerStatsProvider);
     ref.invalidate(playerMetricsProvider);
+    ref.invalidate(todayPlanProvider);
+    ref.invalidate(habitStreaksProvider);
+    ref.invalidate(focusQualityWeekProvider);
 
     // Dashboard (fase 5)
     ref.invalidate(dashboardHeatmapProvider);
@@ -110,20 +128,19 @@ class _HomePageState extends ConsumerState<HomePage> {
       if (!mounted) return;
 
       if (action == 'focus30') {
-        final list = await ref.read(instancesRepoProvider).listTodayInstances();
-        Map<String, dynamic>? pending;
-        for (final item in list) {
-          final status = (item['status'] ?? 'pending') as String;
+        final planRows = await ref.read(playerRepoProvider).getTodayPlan();
+        Map<String, dynamic>? next;
+        for (final row in planRows) {
+          final status = (row['status'] ?? 'pending') as String;
           if (status != 'completed') {
-            pending = item;
+            next = row;
             break;
           }
         }
 
-        final instanceId = pending?['id']?.toString();
-        final habit = pending?['habits'] as Map<String, dynamic>?;
-        final title = habit?['title'] ?? 'Focus';
-        final expected = (habit?['expected_minutes'] as num?)?.toInt() ?? 30;
+        final instanceId = next?['instance_id']?.toString();
+        final title = next?['title']?.toString() ?? 'Focus';
+        final expected = (next?['expected_minutes'] as num?)?.toInt() ?? 30;
 
         if (instanceId != null && mounted) {
           Navigator.push(
@@ -139,6 +156,11 @@ class _HomePageState extends ConsumerState<HomePage> {
             await _refreshAll();
           });
         }
+        return;
+      }
+
+      if (action == 'end_focus') {
+        await FocusModeService.instance.setFocusModeActive(false);
         return;
       }
 
@@ -164,6 +186,63 @@ class _HomePageState extends ConsumerState<HomePage> {
     return hour * 60 + minute;
   }
 
+  Widget _buildInstanceTile(Map<String, dynamic> it) {
+    final status = (it['status'] ?? 'pending') as String;
+    final habit = it['habits'] as Map<String, dynamic>?;
+    final title = habit?['title'] ?? 'Habit';
+    final expected = (habit?['expected_minutes'] as num?)?.toInt() ?? 30;
+    final instanceId = it['id']?.toString();
+    final done = status == 'completed';
+
+    return ListTile(
+      key: ValueKey(instanceId),
+      title: Text(title),
+      subtitle: Text('Status: $status • ${expected}m'),
+      trailing: done
+          ? Icon(
+              Icons.check_circle,
+              color: Theme.of(context).colorScheme.tertiary,
+            )
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'Focus 30',
+                  icon: const Icon(Icons.timer),
+                  onPressed: instanceId == null
+                      ? null
+                      : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => FocusPage(
+                                instanceId: instanceId,
+                                title: title,
+                                minutes: expected,
+                              ),
+                            ),
+                          ).then((_) async {
+                            await _refreshAll();
+                          });
+                        },
+                ),
+                const SizedBox(width: 6),
+                FilledButton(
+                  onPressed: instanceId == null
+                      ? null
+                      : () async {
+                          await ref
+                              .read(instancesRepoProvider)
+                              .completeInstance(instanceId, xp: 10);
+                          await _refreshAll();
+                        },
+                  child: const Text('Complete'),
+                ),
+              ],
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Supabase.instance.client.auth.currentUser;
@@ -171,21 +250,14 @@ class _HomePageState extends ConsumerState<HomePage> {
     final stats = ref.watch(playerStatsProvider);
     final today = ref.watch(todayInstancesProvider);
     final metrics = ref.watch(playerMetricsProvider);
+    final plan = ref.watch(todayPlanProvider);
+    final habitStreaks = ref.watch(habitStreaksProvider);
+    final fq = ref.watch(focusQualityWeekProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('LifeXP'),
         actions: [
-          IconButton(
-            tooltip: 'Dashboard',
-            onPressed: () => context.push('/dashboard'),
-            icon: const Icon(Icons.insights),
-          ),
-          IconButton(
-            tooltip: 'Habits',
-            onPressed: () => context.push('/habits'),
-            icon: const Icon(Icons.tune),
-          ),
           IconButton(
             tooltip: 'Logout',
             onPressed: () async {
@@ -198,14 +270,22 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: _handleHorizontalSwipe,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
           children: [
             Text(
               'Welcome, ${user?.email ?? 'player'}',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            Text(
+              'Desliza: derecha = Alarmas, izquierda = Dashboard',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.tertiary,
+              ),
             ),
             const SizedBox(height: 12),
 
@@ -230,13 +310,27 @@ class _HomePageState extends ConsumerState<HomePage> {
                     border: Border.all(
                       color: Theme.of(context).colorScheme.primary,
                     ),
+                    boxShadow: LifexpShadows.subtlePrimaryGlow,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'LEVEL $level',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: LifexpGradients.xpOfficialSoft,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'LEVEL $level',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -286,6 +380,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     border: Border.all(
                       color: Theme.of(context).colorScheme.primary,
                     ),
+                    boxShadow: LifexpShadows.subtlePrimaryGlow,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,14 +422,122 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
 
             const SizedBox(height: 12),
+            fq.when(
+              data: (q) => Text(
+                '🧠 Focus quality week: ${q['focus_quality_week'] ?? 0}% (${q['actual_minutes_week'] ?? 0}/${q['planned_minutes_week'] ?? 0} min)',
+                style: TextStyle(color: Theme.of(context).colorScheme.tertiary),
+              ),
+              loading: () => const SizedBox.shrink(),
+              error: (e, _) => Text('Focus quality error: $e'),
+            ),
 
-            FilledButton.icon(
-              onPressed: () async {
-                await ref.read(instancesRepoProvider).ensureTodayInstances();
-                await _refreshAll();
+            const SizedBox(height: 12),
+            plan.when(
+              data: (rows) {
+                final pending = rows.where(
+                  (r) => (r['status'] ?? 'pending') != 'completed',
+                );
+                final done = rows.length - pending.length;
+                final next = pending.isNotEmpty ? pending.first : null;
+
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: Theme.of(context).colorScheme.surface,
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Today Plan  •  $done/${rows.length}',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 6),
+                      habitStreaks.when(
+                        data: (s) => Text('Tracked streaks: ${s.length}'),
+                        loading: () => const SizedBox.shrink(),
+                        error: (error, stackTrace) => const SizedBox.shrink(),
+                      ),
+                      const SizedBox(height: 10),
+                      if (next != null) ...[
+                        Text(
+                          'Next: ${next['title']} • ${((next['expected_minutes'] as num?)?.toInt() ?? 30)}m',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton.icon(
+                          onPressed: () {
+                            final instanceId = next['instance_id']?.toString();
+                            final title = next['title']?.toString() ?? 'Focus';
+                            final minutes =
+                                (next['expected_minutes'] as num?)?.toInt() ??
+                                30;
+
+                            if (instanceId == null) return;
+
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FocusPage(
+                                  instanceId: instanceId,
+                                  title: title,
+                                  minutes: minutes,
+                                ),
+                              ),
+                            ).then((_) async => await _refreshAll());
+                          },
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('Start next'),
+                        ),
+                      ] else
+                        const Text('All done ✅'),
+                    ],
+                  ),
+                );
               },
-              icon: const Icon(Icons.sync),
-              label: const Text('Sync today missions'),
+              loading: () => const Padding(
+                padding: EdgeInsets.only(top: 6, bottom: 6),
+                child: LinearProgressIndicator(minHeight: 6),
+              ),
+              error: (e, _) => Text('Plan error: $e'),
+            ),
+
+            const SizedBox(height: 12),
+
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _syncing
+                    ? null
+                    : () async {
+                        setState(() => _syncing = true);
+                        final messenger = ScaffoldMessenger.of(context);
+                        try {
+                          await ref
+                              .read(instancesRepoProvider)
+                              .ensureTodayInstances();
+                          await _refreshAll();
+                        } catch (e) {
+                          messenger.showSnackBar(
+                            SnackBar(content: Text('Sync failed: $e')),
+                          );
+                        } finally {
+                          if (mounted) setState(() => _syncing = false);
+                        }
+                      },
+                icon: _syncing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync),
+                label: Text(_syncing ? 'Syncing...' : 'Sync today missions'),
+              ),
             ),
 
             const SizedBox(height: 16),
@@ -344,84 +547,35 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             const SizedBox(height: 8),
 
-            Expanded(
-              child: today.when(
-                data: (list) {
-                  if (list.isEmpty) {
-                    return const Center(
-                      child: Text('No missions yet. Create a habit first.'),
-                    );
-                  }
-
-                  return ListView.separated(
-                    itemCount: list.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (_, i) {
-                      final it = list[i];
-                      final status = (it['status'] ?? 'pending') as String;
-                      final habit = it['habits'] as Map<String, dynamic>?;
-                      final title = habit?['title'] ?? 'Habit';
-                      final expected =
-                          (habit?['expected_minutes'] as num?)?.toInt() ?? 30;
-                      final instanceId = it['id']?.toString();
-                      final done = status == 'completed';
-
-                      return ListTile(
-                        title: Text(title),
-                        subtitle: Text('Status: $status • ${expected}m'),
-                        trailing: done
-                            ? const Icon(
-                                Icons.check_circle,
-                                color: Colors.greenAccent,
-                              )
-                            : Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    tooltip: 'Focus 30',
-                                    icon: const Icon(Icons.timer),
-                                    onPressed: instanceId == null
-                                        ? null
-                                        : () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) => FocusPage(
-                                                  instanceId: instanceId,
-                                                  title: title,
-                                                  minutes: expected,
-                                                ),
-                                              ),
-                                            ).then((_) async {
-                                              await _refreshAll();
-                                            });
-                                          },
-                                  ),
-                                  const SizedBox(width: 6),
-                                  FilledButton(
-                                    onPressed: instanceId == null
-                                        ? null
-                                        : () async {
-                                            await ref
-                                                .read(instancesRepoProvider)
-                                                .completeInstance(
-                                                  instanceId,
-                                                  xp: 10,
-                                                );
-                                            await _refreshAll();
-                                          },
-                                    child: const Text('Complete'),
-                                  ),
-                                ],
-                              ),
-                      );
-                    },
+            today.when(
+              data: (list) {
+                if (list.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Text(
+                      'No hay misiones hoy. Tus hábitos están programados para otros días (ej. L–V).',
+                      textAlign: TextAlign.center,
+                    ),
                   );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('Error: $e')),
+                }
+
+                return Column(
+                  children: [
+                    for (int i = 0; i < list.length; i++) ...[
+                      _buildInstanceTile(list[i]),
+                      if (i < list.length - 1) const Divider(height: 1),
+                    ],
+                  ],
+                );
+              },
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
               ),
+              error: (e, _) => Center(child: Text('Error: $e')),
             ),
+
+            const SizedBox(height: 32),
           ],
         ),
       ),

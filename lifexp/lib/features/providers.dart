@@ -5,6 +5,7 @@ import 'instances/instances_repo.dart';
 import 'player/player_repo.dart';
 import 'focus/focus_repo.dart';
 
+
 final todayInstancesProvider = FutureProvider.autoDispose((ref) async {
   final repo = ref.watch(instancesRepoProvider);
   return repo.listTodayInstances();
@@ -38,4 +39,19 @@ final instancesRepoProvider = Provider<InstancesRepo>((ref) {
 final playerMetricsProvider = FutureProvider.autoDispose((ref) async {
   final repo = ref.watch(playerRepoProvider);
   return repo.getMetrics();
+});
+
+final todayPlanProvider = FutureProvider.autoDispose((ref) async {
+  final repo = ref.watch(playerRepoProvider);
+  return repo.getTodayPlan();
+});
+
+final habitStreaksProvider = FutureProvider.autoDispose((ref) async {
+  final repo = ref.watch(playerRepoProvider);
+  return repo.getHabitStreaks(days: 90);
+});
+
+final focusQualityWeekProvider = FutureProvider.autoDispose((ref) async {
+  final repo = ref.watch(playerRepoProvider);
+  return repo.getFocusQualityWeek();
 });

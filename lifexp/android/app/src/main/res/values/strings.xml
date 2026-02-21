@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lifexp_accessibility_desc">Blocks selected apps while Focus is active.</string>
+</resources>

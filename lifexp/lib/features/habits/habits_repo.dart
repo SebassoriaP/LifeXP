@@ -11,6 +11,7 @@ class HabitsRepo {
           'id,title,active,created_at,schedule_type,days_of_week,preferred_time,expected_minutes,window_start,window_end',
         )
         .eq('active', true)
+        .isFilter('deleted_at', null)
         .order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(res);
   }
@@ -21,11 +22,13 @@ class HabitsRepo {
         .select(
           'id,title,active,created_at,schedule_type,days_of_week,preferred_time,expected_minutes,window_start,window_end',
         )
+        .eq('active', true)
+        .isFilter('deleted_at', null)
         .order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(res);
   }
 
-  Future<void> createHabit({
+  Future<String> createHabit({
     required String title,
     String scheduleType = 'weekly',
     required List<int> daysOfWeek,
@@ -37,17 +40,22 @@ class HabitsRepo {
     final uid = _client.auth.currentUser?.id;
     if (uid == null) throw Exception('Not authenticated');
 
-    await _client.from('habits').insert({
-      'user_id': uid,
-      'title': title,
-      'schedule_type': scheduleType,
-      'days_of_week': daysOfWeek,
-      'preferred_time': preferredTime,
-      'expected_minutes': expectedMinutes,
-      'window_start': windowStart,
-      'window_end': windowEnd,
-      'active': true,
-    });
+    final res = await _client
+        .from('habits')
+        .insert({
+          'user_id': uid,
+          'title': title,
+          'schedule_type': scheduleType,
+          'days_of_week': daysOfWeek,
+          'preferred_time': preferredTime,
+          'expected_minutes': expectedMinutes,
+          'window_start': windowStart,
+          'window_end': windowEnd,
+          'active': true,
+        })
+        .select('id')
+        .single();
+    return res['id'] as String;
   }
 
   Future<void> setHabitActive(String habitId, bool active) async {
@@ -77,5 +85,9 @@ class HabitsRepo {
           'window_end': windowEnd,
         })
         .eq('id', habitId);
+  }
+
+  Future<void> deleteHabit(String habitId) async {
+    await _client.rpc('delete_habit', params: {'p_habit_id': habitId});
   }
 }

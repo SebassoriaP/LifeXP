@@ -6,7 +6,40 @@ class InstancesRepo {
   final SupabaseClient _client;
 
   Future<void> ensureTodayInstances() async {
-    await _client.rpc('ensure_today_instances');
+    final localDate = DateTime.now().toIso8601String().substring(0, 10);
+    await _client.rpc('ensure_instances_on', params: {'p_date': localDate});
+  }
+
+  /// Directly inserts a pending instance for [habitId] on today's date if
+  /// today's weekday is in [daysOfWeek] and no instance exists yet.
+  /// Uses 0=Sunday, 1=Monday, …, 6=Saturday (matches PostgreSQL DOW).
+  Future<void> ensureInstanceForToday({
+    required String habitId,
+    required List<int> daysOfWeek,
+  }) async {
+    final now = DateTime.now();
+    // DateTime.weekday: Mon=1…Sat=6,Sun=7 → convert to 0=Sun,1=Mon…6=Sat
+    final todayDow = now.weekday % 7;
+    if (!daysOfWeek.contains(todayDow)) return;
+
+    final localDate = now.toIso8601String().substring(0, 10);
+    final uid = _client.auth.currentUser?.id;
+    if (uid == null) return;
+
+    final existing = await _client
+        .from('habit_instances')
+        .select('id')
+        .eq('habit_id', habitId)
+        .eq('date', localDate);
+
+    if ((existing as List).isNotEmpty) return;
+
+    await _client.from('habit_instances').insert({
+      'user_id': uid,
+      'habit_id': habitId,
+      'date': localDate,
+      'status': 'pending',
+    });
   }
 
   Future<bool> hasCompletedToday() async {
@@ -36,16 +69,22 @@ class InstancesRepo {
   }
 
   Future<List<Map<String, dynamic>>> listTodayInstances() async {
-    final todayUtc = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+    final localDate = DateTime.now().toIso8601String().substring(0, 10);
     final res = await _client
         .from('habit_instances')
         .select(
-          'id, status, date, completed_at, habit_id, habits(title, preferred_time, expected_minutes)',
+          'id, status, date, completed_at, habit_id, habits(title, preferred_time, expected_minutes, active, deleted_at)',
         )
-        .eq('date', todayUtc)
+        .eq('date', localDate)
         .order('created_at', ascending: false);
 
-    return List<Map<String, dynamic>>.from(res);
+    return List<Map<String, dynamic>>.from(res).where((item) {
+      final habit = item['habits'] as Map<String, dynamic>?;
+      if (habit == null) return false;
+      final active = habit['active'] as bool? ?? true;
+      final deletedAt = habit['deleted_at'];
+      return active && deletedAt == null;
+    }).toList();
   }
 
   Future<bool> completeInstance(String instanceId, {int xp = 10}) async {

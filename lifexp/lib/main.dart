@@ -5,7 +5,6 @@ import 'app/app.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/notifications/notification_service.dart';
 
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 

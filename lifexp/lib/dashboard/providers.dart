@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/supabase/supabase_client.dart';
 import 'models.dart';
 
+
 final dashboardHeatmapProvider =
     FutureProvider.autoDispose<List<HeatmapDay>>((ref) async {
   final SupabaseClient sb = ref.read(supabaseProvider);

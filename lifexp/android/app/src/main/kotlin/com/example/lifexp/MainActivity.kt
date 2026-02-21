@@ -68,6 +68,19 @@ class MainActivity : FlutterActivity() {
                         prefs.edit().remove("pending_action").apply()
                         result.success(null)
                     }
+                    "setFocusModeActive" -> {
+                        val active = call.argument<Boolean>("active") ?: false
+                        prefs.edit().putBoolean("focus_mode_active", active).apply()
+                        if (!active) {
+                            prefs.edit().putBoolean("blocking_now", false).apply()
+                        }
+                        result.success(null)
+                    }
+                    "setBlockedPackages" -> {
+                        val json = call.argument<String>("json") ?: "[]"
+                        prefs.edit().putString("blocked_packages", json).apply()
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }

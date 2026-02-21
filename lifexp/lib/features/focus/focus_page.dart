@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/focus_mode/focus_mode_service.dart';
+import '../../theme/lifexp_colors.dart';
 import '../providers.dart';
 
 class FocusPage extends ConsumerStatefulWidget {
@@ -36,6 +38,7 @@ class _FocusPageState extends ConsumerState<FocusPage> {
   @override
   void dispose() {
     _timer?.cancel();
+    FocusModeService.instance.setFocusModeActive(false);
     super.dispose();
   }
 
@@ -50,6 +53,10 @@ class _FocusPageState extends ConsumerState<FocusPage> {
     setState(() => _starting = true);
 
     try {
+      await FocusModeService.instance.setBlockedPackages(
+        kDefaultBlockedPackages,
+      );
+      await FocusModeService.instance.setFocusModeActive(true);
       final sid = await ref
           .read(focusRepoProvider)
           .startSession(
@@ -94,14 +101,17 @@ class _FocusPageState extends ConsumerState<FocusPage> {
             .endSession(sessionId: sid, result: 'completed');
       }
 
-      // award extra XP + complete mission
+      // Focus XP is awarded by backend in end_focus_session.
+      // Here we only grant mission-completion XP.
       await ref
           .read(instancesRepoProvider)
-          .completeInstance(widget.instanceId, xp: 20);
+          .completeInstance(widget.instanceId, xp: 10);
 
       if (!mounted) return;
       ref.invalidate(playerStatsProvider);
       ref.invalidate(todayInstancesProvider);
+      await FocusModeService.instance.setFocusModeActive(false);
+      if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
@@ -134,6 +144,7 @@ class _FocusPageState extends ConsumerState<FocusPage> {
     if (ok != true) return;
 
     _timer?.cancel();
+    await FocusModeService.instance.setFocusModeActive(false);
     final sid = _sessionId;
     try {
       if (sid != null) {
@@ -168,55 +179,68 @@ class _FocusPageState extends ConsumerState<FocusPage> {
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(18),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  widget.title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary,
                 ),
-                const SizedBox(height: 18),
-                Text(
-                  time,
-                  style: const TextStyle(
-                    fontSize: 56,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 22),
-
-                if (!_started)
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _starting ? null : _start,
-                      child: Text(
-                        _starting
-                            ? 'Starting...'
-                            : 'Start ${widget.minutes} min',
-                      ),
-                    ),
-                  )
-                else
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _finishing ? null : _complete,
-                      child: Text(
-                        _finishing
-                            ? 'Finishing...'
-                            : 'Finish now (only if done)',
-                      ),
+                boxShadow: LifexpShadows.subtlePrimaryGlow,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
+                  const SizedBox(height: 18),
+                  Text(
+                    time,
+                    style: TextStyle(
+                      fontSize: 56,
+                      fontWeight: FontWeight.w900,
+                      color: Theme.of(context).colorScheme.tertiary,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
 
-                const SizedBox(height: 12),
-                TextButton(onPressed: _abandon, child: const Text('Abandon')),
-              ],
+                  if (!_started)
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: _starting ? null : _start,
+                        child: Text(
+                          _starting
+                              ? 'Starting...'
+                              : 'Start ${widget.minutes} min',
+                        ),
+                      ),
+                    )
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: _finishing ? null : _complete,
+                        child: Text(
+                          _finishing
+                              ? 'Finishing...'
+                              : 'Finish now (only if done)',
+                        ),
+                      ),
+                    ),
+
+                  const SizedBox(height: 12),
+                  TextButton(onPressed: _abandon, child: const Text('Abandon')),
+                ],
+              ),
             ),
           ),
         ),
