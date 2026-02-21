@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -186,6 +187,77 @@ class _HomePageState extends ConsumerState<HomePage> {
     return hour * 60 + minute;
   }
 
+  Future<Map<String, dynamic>> _loadStickyDebug() async {
+    final service = NotificationService.instance;
+    final enabled = await service.getStickyEnabled();
+    final decision = await service.getStickyLastDecision();
+    final date = await service.getStickyLastDate();
+    final syncAtMs = await service.getStickyLastSyncAt();
+    final pendingAction = await service.getPendingAction();
+    final syncAt = syncAtMs <= 0
+        ? '-'
+        : DateTime.fromMillisecondsSinceEpoch(syncAtMs).toLocal().toString();
+
+    return {
+      'enabled': enabled,
+      'decision': decision.isEmpty ? '-' : decision,
+      'date': date.isEmpty ? '-' : date,
+      'syncAt': syncAt,
+      'pendingAction': pendingAction.isEmpty ? '-' : pendingAction,
+    };
+  }
+
+  Widget _buildStickyDebugCard() {
+    if (!kDebugMode) return const SizedBox.shrink();
+
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _loadStickyDebug(),
+      builder: (context, snapshot) {
+        final textTheme = Theme.of(context).textTheme;
+        if (!snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: LinearProgressIndicator(minHeight: 4),
+          );
+        }
+        final data = snapshot.data!;
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: Theme.of(context).colorScheme.surface,
+            border: Border.all(color: Theme.of(context).colorScheme.secondary),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'Debug Notifications',
+                    style: textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => setState(() {}),
+                    child: const Text('Refresh'),
+                  ),
+                ],
+              ),
+              Text('enabled: ${data['enabled']}'),
+              Text('lastDecision: ${data['decision']}'),
+              Text('lastDate: ${data['date']}'),
+              Text('lastSyncAt: ${data['syncAt']}'),
+              Text('pendingAction: ${data['pendingAction']}'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildInstanceTile(Map<String, dynamic> it) {
     final status = (it['status'] ?? 'pending') as String;
     final habit = it['habits'] as Map<String, dynamic>?;
@@ -287,6 +359,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                 color: Theme.of(context).colorScheme.tertiary,
               ),
             ),
+            if (kDebugMode) ...[
+              const SizedBox(height: 8),
+              _buildStickyDebugCard(),
+            ],
             const SizedBox(height: 12),
 
             // 🎮 HUD (XP + Level + Streak)

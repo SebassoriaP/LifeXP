@@ -37,6 +37,9 @@ class MainActivity : FlutterActivity() {
                         prefs.edit().putBoolean("sticky_enabled", enabled).apply()
                         result.success(null)
                     }
+                    "getStickyEnabled" -> {
+                        result.success(prefs.getBoolean("sticky_enabled", true))
+                    }
                     "setStickyLastDate" -> {
                         val date = call.argument<String>("date")
                         prefs.edit().putString("sticky_last_date", date).apply()

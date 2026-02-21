@@ -32,11 +32,12 @@ class NotificationService {
 
     await _plugin.initialize(initSettings);
 
-    await _plugin
+    final permissionGranted = await _plugin
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.requestNotificationsPermission();
+    _log('notification permission granted=$permissionGranted');
 
     // Create channel explicitly to avoid relying on implicit plugin behavior.
     await _plugin
@@ -120,6 +121,9 @@ class NotificationService {
         'daily scheduled id=$dailyScheduleNotifId at=$scheduled exact=false',
       );
     }
+
+    final pending = await _plugin.pendingNotificationRequests();
+    _log('pending notifications=${pending.map((p) => p.id).toList()}');
   }
 
   Future<void> showOngoingNow() async {
@@ -222,6 +226,12 @@ class NotificationService {
       'enabled': enabled,
     });
     _log('setStickyEnabled=$enabled');
+  }
+
+  Future<bool> getStickyEnabled() async {
+    if (!_isAndroid) return false;
+    final res = await _stickyChannel.invokeMethod<dynamic>('getStickyEnabled');
+    return (res as bool?) ?? false;
   }
 
   Future<void> setStickyLastDate(String yyyyMmDd) async {

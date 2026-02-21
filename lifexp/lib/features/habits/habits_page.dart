@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../providers.dart';
 
 final habitsListProvider = FutureProvider.autoDispose((ref) async {
@@ -9,6 +10,17 @@ final habitsListProvider = FutureProvider.autoDispose((ref) async {
 
 class HabitsPage extends ConsumerWidget {
   const HabitsPage({super.key});
+
+  void _handleHorizontalSwipe(BuildContext context, DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity.abs() < 250) return;
+
+    if (velocity > 0) {
+      context.go('/dashboard');
+      return;
+    }
+    context.go('/home');
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -46,92 +58,101 @@ class HabitsPage extends ConsumerWidget {
         },
         child: const Icon(Icons.add),
       ),
-      body: habits.when(
-        data: (list) => ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemBuilder: (_, i) {
-            final h = list[i];
-            final active = h['active'] == true;
-            final preferredTime = h['preferred_time']?.toString() ?? '--:--:--';
-            final expected = (h['expected_minutes'] as num?)?.toInt() ?? 30;
-            return Card(
-              key: ValueKey(h['id']?.toString()),
-              clipBehavior: Clip.hardEdge,
-              child: ListTile(
-                onTap: () => _openEditHabit(context, ref, h),
-                title: Text(h['title'] ?? ''),
-                subtitle: Text(
-                  '${active ? 'Active' : 'Inactive'} • ${expected}m • ${_hhmm(preferredTime)}',
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      tooltip: 'Editar',
-                      icon: const Icon(Icons.edit),
-                      onPressed: () => _openEditHabit(context, ref, h),
-                    ),
-                    IconButton(
-                      tooltip: 'Eliminar',
-                      icon: Icon(
-                        Icons.delete_outline,
-                        color: Theme.of(context).colorScheme.error,
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: (details) =>
+            _handleHorizontalSwipe(context, details),
+        child: habits.when(
+          data: (list) => ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemBuilder: (_, i) {
+              final h = list[i];
+              final active = h['active'] == true;
+              final preferredTime =
+                  h['preferred_time']?.toString() ?? '--:--:--';
+              final expected = (h['expected_minutes'] as num?)?.toInt() ?? 30;
+              return Card(
+                key: ValueKey(h['id']?.toString()),
+                clipBehavior: Clip.hardEdge,
+                child: ListTile(
+                  onTap: () => _openEditHabit(context, ref, h),
+                  title: Text(h['title'] ?? ''),
+                  subtitle: Text(
+                    '${active ? 'Active' : 'Inactive'} • ${expected}m • ${_hhmm(preferredTime)}',
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Editar',
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => _openEditHabit(context, ref, h),
                       ),
-                      onPressed: () async {
-                        final ok = await showDialog<bool>(
-                          context: context,
-                          builder: (_) => AlertDialog(
-                            title: const Text('Delete habit?'),
-                            content: const Text(
-                              'This will remove it from your list (history stays).',
+                      IconButton(
+                        tooltip: 'Eliminar',
+                        icon: Icon(
+                          Icons.delete_outline,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        onPressed: () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Delete habit?'),
+                              content: const Text(
+                                'This will remove it from your list (history stays).',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: const Text('Delete'),
+                                ),
+                              ],
                             ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Cancel'),
-                              ),
-                              FilledButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text('Delete'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (ok != true) return;
+                          );
+                          if (ok != true) return;
 
-                        final habitId = h['id']?.toString();
-                        if (habitId == null) return;
-                        await ref.read(habitsRepoProvider).deleteHabit(habitId);
-                        await ref
-                            .read(instancesRepoProvider)
-                            .ensureTodayInstances();
-                        ref.invalidate(habitsListProvider);
-                        ref.invalidate(todayInstancesProvider);
-                      },
-                    ),
-                    Switch(
-                      value: active,
-                      onChanged: (v) async {
-                        await ref
-                            .read(habitsRepoProvider)
-                            .setHabitActive(h['id'], v);
-                        await ref
-                            .read(instancesRepoProvider)
-                            .ensureTodayInstances();
-                        ref.invalidate(habitsListProvider);
-                        ref.invalidate(todayInstancesProvider);
-                      },
-                    ),
-                  ],
+                          final habitId = h['id']?.toString();
+                          if (habitId == null) return;
+                          await ref
+                              .read(habitsRepoProvider)
+                              .deleteHabit(habitId);
+                          await ref
+                              .read(instancesRepoProvider)
+                              .ensureTodayInstances();
+                          ref.invalidate(habitsListProvider);
+                          ref.invalidate(todayInstancesProvider);
+                        },
+                      ),
+                      Switch(
+                        value: active,
+                        onChanged: (v) async {
+                          await ref
+                              .read(habitsRepoProvider)
+                              .setHabitActive(h['id'], v);
+                          await ref
+                              .read(instancesRepoProvider)
+                              .ensureTodayInstances();
+                          ref.invalidate(habitsListProvider);
+                          ref.invalidate(todayInstancesProvider);
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
-          separatorBuilder: (_, _) => const Divider(height: 1),
-          itemCount: list.length,
+              );
+            },
+            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemCount: list.length,
+          ),
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Error: $e')),
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
       ),
     );
   }

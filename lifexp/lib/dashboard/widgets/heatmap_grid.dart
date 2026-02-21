@@ -21,10 +21,11 @@ class HeatmapGrid extends StatelessWidget {
       return const SizedBox(height: 120, child: Center(child: Text('No data')));
     }
 
-    final byDate = {for (final d in days) _dateOnly(d.day): d};
+    final sortedDays = [...days]..sort((a, b) => a.day.compareTo(b.day));
+    final byDate = {for (final d in sortedDays) _dateOnly(d.day): d};
 
-    final start = _dateOnly(days.first.day);
-    final end = _dateOnly(days.last.day);
+    final start = _dateOnly(sortedDays.first.day);
+    final end = _dateOnly(sortedDays.last.day);
     final startMonday = start.subtract(Duration(days: start.weekday - 1));
 
     final totalDays = end.difference(startMonday).inDays + 1;
@@ -40,17 +41,21 @@ class HeatmapGrid extends StatelessWidget {
               children: List.generate(7, (r) {
                 final day = startMonday.add(Duration(days: w * 7 + r));
                 final d = byDate[_dateOnly(day)];
-                final score = d?.score ?? 0;
-
-                final color = _scoreColor(context, score);
-
-                return Container(
-                  margin: EdgeInsets.only(bottom: gap),
-                  width: cell,
-                  height: cell,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(3),
+                final score = (d?.score ?? 0).clamp(0, 4);
+                return Tooltip(
+                  message: d == null
+                      ? '${day.year}-${day.month}-${day.day}: no data'
+                      : '${day.year}-${day.month}-${day.day}  '
+                            'score=${d.score}  habits=${d.habitDone}  '
+                            'focus=${d.focusMinutes}m  xp=${d.xp}',
+                  child: Container(
+                    margin: EdgeInsets.only(bottom: gap),
+                    width: cell,
+                    height: cell,
+                    decoration: BoxDecoration(
+                      color: _scoreColor(context, score),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
                   ),
                 );
               }),
@@ -66,9 +71,9 @@ class HeatmapGrid extends StatelessWidget {
     final bg = Theme.of(context).colorScheme.surfaceContainerHighest;
 
     if (score <= 0) return bg;
-    if (score == 1) return base;
-    if (score == 2) return base;
-    if (score == 3) return base;
+    if (score == 1) return Color.lerp(bg, base, 0.30) ?? base;
+    if (score == 2) return Color.lerp(bg, base, 0.50) ?? base;
+    if (score == 3) return Color.lerp(bg, base, 0.72) ?? base;
     return base;
   }
 
